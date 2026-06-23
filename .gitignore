@@ -1,1 +1,6 @@
-exzmple.env
+node_modules/
+dist/
+.env
+.env.local
+*.local
+txt.txt
