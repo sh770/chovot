@@ -36,8 +36,11 @@ export default function Members() {
         if (!summary[debt.member_id]) {
           summary[debt.member_id] = { total: 0, unpaid: 0 }
         }
+        const paidAmount = debt.paid_amount !== undefined && debt.paid_amount !== null
+          ? Number(debt.paid_amount)
+          : (debt.paid ? Number(debt.amount) : 0)
         summary[debt.member_id].total += Number(debt.amount)
-        summary[debt.member_id].unpaid += Number(debt.amount) - Number(debt.paid_amount || 0)
+        summary[debt.member_id].unpaid += Number(debt.amount) - paidAmount
       })
 
       setMembers(m || [])

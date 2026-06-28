@@ -16,6 +16,14 @@ export default function MemberDetail() {
   const [memberForm, setMemberForm] = useState({ name: '', phone: '', notes: '' })
   const [paymentDebt, setPaymentDebt] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentError, setPaymentError] = useState(null)
+
+  function getPaidAmount(d) {
+    // Fallback: if paid_amount column doesn't exist yet, use old 'paid' boolean
+    return d.paid_amount !== undefined && d.paid_amount !== null
+      ? Number(d.paid_amount)
+      : (d.paid ? Number(d.amount) : 0)
+  }
 
   function formatHebrewDate(dateStr) {
     try {
@@ -66,6 +74,7 @@ export default function MemberDetail() {
         amount: parseFloat(form.amount),
         description: form.description,
         paid: false,
+        paid_amount: 0,
         synagogue_id: synagogueId
       })
       setForm({ amount: '', description: '' })
@@ -79,19 +88,25 @@ export default function MemberDetail() {
   }
 
   async function recordPayment(debtId, amount) {
+    setSaving(true)
+    setPaymentError(null)
     try {
-      await supabase.from('debts').update({ paid_amount: amount }).eq('id', debtId)
+      const { error } = await supabase.from('debts').update({ paid_amount: amount }).eq('id', debtId)
+      if (error) throw error
       setPaymentDebt(null)
       setPaymentAmount('')
       await loadData()
     } catch (err) {
-      console.error(err)
+      setPaymentError(err.message || 'שגיאה בשמירת התשלום. ייתכן שעדיין לא הרצת את add-partial-payment.sql בדאטאבייס.')
+    } finally {
+      setSaving(false)
     }
   }
 
   function openPayment(debt) {
     setPaymentDebt(debt)
-    setPaymentAmount(String(debt.paid_amount || 0))
+    setPaymentAmount(String(getPaidAmount(debt)))
+    setPaymentError(null)
   }
 
   async function deleteDebt(debtId) {
@@ -136,7 +151,7 @@ export default function MemberDetail() {
   }
 
   const totalDebt = debts.reduce((sum, d) => sum + Number(d.amount), 0)
-  const paidTotal = debts.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0)
+  const paidTotal = debts.reduce((sum, d) => sum + getPaidAmount(d), 0)
   const unpaidTotal = totalDebt - paidTotal
 
   return (
@@ -270,7 +285,7 @@ export default function MemberDetail() {
         ) : (
           <div className="debts-list">
             {debts.map(d => {
-              const paid = Number(d.paid_amount || 0)
+              const paid = getPaidAmount(d)
               const total = Number(d.amount)
               const remaining = total - paid
               const isFullyPaid = paid >= total && total > 0
@@ -331,6 +346,7 @@ export default function MemberDetail() {
               <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
                 {paymentDebt.description} — {Number(paymentDebt.amount).toLocaleString()} ₪
               </p>
+              {paymentError && <div className="error-msg">{paymentError}</div>}
               <div className="form-group">
                 <label>סכום ששולם (₪)</label>
                 <input
@@ -359,7 +375,7 @@ export default function MemberDetail() {
                 >
                   שלם מלא
                 </button>
-                {Number(paymentDebt.paid_amount || 0) > 0 && (
+                {getPaidAmount(paymentDebt) > 0 && (
                   <button
                     className="btn btn-secondary"
                     style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
