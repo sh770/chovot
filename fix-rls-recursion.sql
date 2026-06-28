@@ -28,15 +28,26 @@ AS $$
   );
 $$;
 
--- 2. מחיקת הפוליסיס הישנים שגורמים ל-recursion
+-- 2. מחיקת כל הפוליסיס הישנים (חובה לפני CREATE מחדש)
+-- profiles
 DROP POLICY IF EXISTS "profiles_select_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
 DROP POLICY IF EXISTS "profiles_update_super_admin" ON profiles;
 DROP POLICY IF EXISTS "profiles_delete_super_admin" ON profiles;
+DROP POLICY IF EXISTS "profiles_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_super_admin_all" ON profiles;
+-- synagogues
+DROP POLICY IF EXISTS "anyone_insert_synagogue" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_all_synagogues" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_delete_synagogue" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_read_synagogue" ON synagogues;
+DROP POLICY IF EXISTS "admin_read_own_synagogue" ON synagogues;
+-- members & debts
 DROP POLICY IF EXISTS "members_synagogue_access" ON members;
+DROP POLICY IF EXISTS "authenticated_all_members" ON members;
 DROP POLICY IF EXISTS "debts_synagogue_access" ON debts;
+DROP POLICY IF EXISTS "authenticated_all_debts" ON debts;
 
 -- 3. פוליסיס חדשים לטבלת profiles (ללא recursion)
 CREATE POLICY "profiles_select_own"
