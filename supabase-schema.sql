@@ -38,6 +38,7 @@ $$;
 -- 4. הוספת synagogue_id לטבלאות קיימות
 ALTER TABLE members ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
 ALTER TABLE debts ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
+ALTER TABLE debts ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0;
 
 -- 4. אינדקסים
 CREATE INDEX IF NOT EXISTS idx_members_synagogue ON members(synagogue_id);

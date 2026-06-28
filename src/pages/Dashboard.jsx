@@ -34,7 +34,7 @@ export default function Dashboard() {
         .eq('synagogue_id', synagogueId)
 
       const totalDebt = debts?.reduce((sum, d) => sum + Number(d.amount), 0) || 0
-      const paidDebt = debts?.filter(d => d.paid).reduce((sum, d) => sum + Number(d.amount), 0) || 0
+      const paidDebt = debts?.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0) || 0
       const unpaidDebt = totalDebt - paidDebt
 
       const { data: members } = await supabase

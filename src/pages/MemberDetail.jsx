@@ -14,6 +14,18 @@ export default function MemberDetail() {
   const [editMember, setEditMember] = useState(false)
   const [form, setForm] = useState({ amount: '', description: '' })
   const [memberForm, setMemberForm] = useState({ name: '', phone: '', notes: '' })
+  const [paymentDebt, setPaymentDebt] = useState(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+
+  function formatHebrewDate(dateStr) {
+    try {
+      return new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
+        year: 'numeric', month: 'long', day: 'numeric'
+      }).format(new Date(dateStr))
+    } catch {
+      return ''
+    }
+  }
 
   useEffect(() => { loadData() }, [id])
 
@@ -66,13 +78,20 @@ export default function MemberDetail() {
     }
   }
 
-  async function togglePaid(debtId, current) {
+  async function recordPayment(debtId, amount) {
     try {
-      await supabase.from('debts').update({ paid: !current }).eq('id', debtId)
+      await supabase.from('debts').update({ paid_amount: amount }).eq('id', debtId)
+      setPaymentDebt(null)
+      setPaymentAmount('')
       await loadData()
     } catch (err) {
       console.error(err)
     }
+  }
+
+  function openPayment(debt) {
+    setPaymentDebt(debt)
+    setPaymentAmount(String(debt.paid_amount || 0))
   }
 
   async function deleteDebt(debtId) {
@@ -117,8 +136,8 @@ export default function MemberDetail() {
   }
 
   const totalDebt = debts.reduce((sum, d) => sum + Number(d.amount), 0)
-  const unpaidTotal = debts.filter(d => !d.paid).reduce((sum, d) => sum + Number(d.amount), 0)
-  const paidTotal = debts.filter(d => d.paid).reduce((sum, d) => sum + Number(d.amount), 0)
+  const paidTotal = debts.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0)
+  const unpaidTotal = totalDebt - paidTotal
 
   return (
     <div className="member-detail">
@@ -225,7 +244,7 @@ export default function MemberDetail() {
                   <label>תיאור</label>
                   <input
                     type="text"
-                    placeholder="למשל: אבול, מנוי שנתי, תרומה..."
+                    placeholder="למשל: תרומה, עליה לתורה, אבול... או כתוב חופשי"
                     value={form.description}
                     onChange={e => setForm({ ...form, description: e.target.value })}
                     required
@@ -250,39 +269,111 @@ export default function MemberDetail() {
           </div>
         ) : (
           <div className="debts-list">
-            {debts.map(d => (
-              <div key={d.id} className={`debt-item ${d.paid ? 'debt-paid' : ''}`}>
-                <div className="debt-status">
+            {debts.map(d => {
+              const paid = Number(d.paid_amount || 0)
+              const total = Number(d.amount)
+              const remaining = total - paid
+              const isFullyPaid = paid >= total && total > 0
+              const isPartial = paid > 0 && !isFullyPaid
+              const statusIcon = isFullyPaid ? '✅' : isPartial ? '🔄' : '⬜'
+
+              return (
+                <div key={d.id} className={`debt-item ${isFullyPaid ? 'debt-paid' : ''}`}>
+                  <div className="debt-status">
+                    <button
+                      className={`debt-check ${isFullyPaid ? 'checked' : ''}`}
+                      onClick={() => openPayment(d)}
+                      title={isFullyPaid ? 'לחץ לשינוי תשלום' : 'לחץ להכנסת תשלום'}
+                    >
+                      {statusIcon}
+                    </button>
+                  </div>
+                  <div className="debt-info">
+                    <span className="debt-amount">
+                      {total.toLocaleString()} ₪
+                    </span>
+                    {isPartial && (
+                      <span className="debt-partial">
+                        שולם {paid.toLocaleString()} ₪ · נשאר {remaining.toLocaleString()} ₪
+                      </span>
+                    )}
+                    {isFullyPaid && (
+                      <span className="debt-paid-label">שולם במלואו</span>
+                    )}
+                    <span className="debt-desc">{d.description}</span>
+                    <span className="debt-date">
+                      {new Date(d.created_at).toLocaleDateString('he-IL', {
+                        year: 'numeric', month: 'long', day: 'numeric'
+                      })}
+                    </span>
+                    <span className="debt-date-hebrew">
+                      {formatHebrewDate(d.created_at)}
+                    </span>
+                  </div>
                   <button
-                    className={`debt-check ${d.paid ? 'checked' : ''}`}
-                    onClick={() => togglePaid(d.id, d.paid)}
-                    title={d.paid ? 'סמן כפתוח' : 'סמן כשולם'}
+                    className="btn-icon danger"
+                    onClick={() => deleteDebt(d.id)}
+                    title="מחק חוב"
                   >
-                    {d.paid ? '✅' : '⬜'}
+                    🗑️
                   </button>
                 </div>
-                <div className="debt-info">
-                  <span className="debt-amount">
-                    {Number(d.amount).toLocaleString()} ₪
-                  </span>
-                  <span className="debt-desc">{d.description}</span>
-                  <span className="debt-date">
-                    {new Date(d.created_at).toLocaleDateString('he-IL', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </span>
-                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* תפריט תשלום */}
+        {paymentDebt && (
+          <div className="modal-overlay" onClick={() => setPaymentDebt(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <h3>תשלום חוב</h3>
+              <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
+                {paymentDebt.description} — {Number(paymentDebt.amount).toLocaleString()} ₪
+              </p>
+              <div className="form-group">
+                <label>סכום ששולם (₪)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={Number(paymentDebt.amount)}
+                  placeholder="0.00"
+                  value={paymentAmount}
+                  onChange={e => setPaymentAmount(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="form-buttons">
                 <button
-                  className="btn-icon danger"
-                  onClick={() => deleteDebt(d.id)}
-                  title="מחק חוב"
+                  className="btn btn-primary"
+                  onClick={() => recordPayment(paymentDebt.id, parseFloat(paymentAmount) || 0)}
+                  disabled={saving}
                 >
-                  🗑️
+                  {saving ? 'שומר...' : 'עדכן תשלום'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => recordPayment(paymentDebt.id, Number(paymentDebt.amount))}
+                  disabled={saving}
+                >
+                  שלם מלא
+                </button>
+                {Number(paymentDebt.paid_amount || 0) > 0 && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                    onClick={() => recordPayment(paymentDebt.id, 0)}
+                    disabled={saving}
+                  >
+                    בטל תשלום
+                  </button>
+                )}
+                <button className="btn btn-secondary" type="button" onClick={() => setPaymentDebt(null)}>
+                  בטל
                 </button>
               </div>
-            ))}
+            </div>
           </div>
         )}
       </div>

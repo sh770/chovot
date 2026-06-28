@@ -912,6 +912,24 @@ a {
   color: var(--text-secondary);
 }
 
+.debt-date-hebrew {
+  font-size: 0.7rem;
+  color: var(--accent);
+  direction: rtl;
+}
+
+.debt-partial {
+  font-size: 0.78rem;
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.debt-paid-label {
+  font-size: 0.78rem;
+  color: var(--success);
+  font-weight: 500;
+}
+
 /* ============================
    Empty State
    ============================ */

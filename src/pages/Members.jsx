@@ -37,9 +37,7 @@ export default function Members() {
           summary[debt.member_id] = { total: 0, unpaid: 0 }
         }
         summary[debt.member_id].total += Number(debt.amount)
-        if (!debt.paid) {
-          summary[debt.member_id].unpaid += Number(debt.amount)
-        }
+        summary[debt.member_id].unpaid += Number(debt.amount) - Number(debt.paid_amount || 0)
       })
 
       setMembers(m || [])
