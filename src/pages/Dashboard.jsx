@@ -30,7 +30,7 @@ export default function Dashboard() {
 
       const { data: debts } = await supabase
         .from('debts')
-        .select('amount, paid')
+        .select('amount, paid, paid_amount')
         .eq('synagogue_id', synagogueId)
 
       const totalDebt = debts?.reduce((sum, d) => sum + Number(d.amount), 0) || 0

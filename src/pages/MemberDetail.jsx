@@ -91,7 +91,10 @@ export default function MemberDetail() {
     setSaving(true)
     setPaymentError(null)
     try {
-      const { error } = await supabase.from('debts').update({ paid_amount: amount }).eq('id', debtId)
+      const { error } = await supabase.from('debts').update({
+        paid_amount: amount,
+        paid: amount >= Number(paymentDebt.amount)
+      }).eq('id', debtId)
       if (error) throw error
       setPaymentDebt(null)
       setPaymentAmount('')

@@ -28,7 +28,7 @@ export default function Members() {
 
       const { data: d } = await supabase
         .from('debts')
-        .select('member_id, amount, paid')
+        .select('member_id, amount, paid, paid_amount')
         .eq('synagogue_id', synagogueId)
 
       const summary = {}
