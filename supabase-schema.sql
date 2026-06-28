@@ -21,7 +21,21 @@ CREATE TABLE IF NOT EXISTS profiles (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. הוספת synagogue_id לטבלאות קיימות
+-- 3. פונקציית עזר למניעת recursion בפוליסיס (SECURITY DEFINER = בלי RLS)
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE user_id = auth.uid()::text AND role = 'super_admin'
+  );
+$$;
+
+-- 4. הוספת synagogue_id לטבלאות קיימות
 ALTER TABLE members ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
 ALTER TABLE debts ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
 
@@ -51,17 +65,17 @@ CREATE POLICY "anyone_insert_synagogue"
 -- סופר אדמין יכול לעדכן ולמחוק
 CREATE POLICY "super_admin_all_synagogues"
   ON synagogues FOR UPDATE TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'));
+  USING (public.is_super_admin())
+  WITH CHECK (public.is_super_admin());
 
 CREATE POLICY "super_admin_delete_synagogue"
   ON synagogues FOR DELETE TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'));
+  USING (public.is_super_admin());
 
 -- קריאה: סופר אדמין רואה הכל, רגילים רואים רק את שלהם
 CREATE POLICY "super_admin_read_synagogue"
   ON synagogues FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'));
+  USING (public.is_super_admin());
 
 CREATE POLICY "admin_read_own_synagogue"
   ON synagogues FOR SELECT TO authenticated
@@ -76,9 +90,7 @@ CREATE POLICY "profiles_insert_own"
 -- SELECT: רואה פרופיל משלו, סופר אדמין רואה הכל
 CREATE POLICY "profiles_select_own"
   ON profiles FOR SELECT TO authenticated
-  USING (user_id = auth.uid()::text OR EXISTS (
-    SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'
-  ));
+  USING (user_id = auth.uid()::text OR public.is_super_admin());
 
 -- UPDATE: יכול לעדכן פרופיל משלו, סופר אדמין יכול לעדכן הכל
 CREATE POLICY "profiles_update_own"
@@ -88,24 +100,24 @@ CREATE POLICY "profiles_update_own"
 
 CREATE POLICY "profiles_update_super_admin"
   ON profiles FOR UPDATE TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'));
+  USING (public.is_super_admin())
+  WITH CHECK (public.is_super_admin());
 
 -- DELETE: סופר אדמין יכול למחוק כל פרופיל
 CREATE POLICY "profiles_delete_super_admin"
   ON profiles FOR DELETE TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin'));
+  USING (public.is_super_admin());
 
 -- Members: קרא/כתוב רק של בית הכנסת שלך, או הכל אם סופר אדמין
 CREATE POLICY "members_synagogue_access"
   ON members FOR ALL TO authenticated
   USING (
     synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
-    OR EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin')
+    OR public.is_super_admin()
   )
   WITH CHECK (
     synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
-    OR EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin')
+    OR public.is_super_admin()
   );
 
 -- Debts: קרא/כתוב רק של בית הכנסת שלך, או הכל אם סופר אדמין
@@ -113,9 +125,9 @@ CREATE POLICY "debts_synagogue_access"
   ON debts FOR ALL TO authenticated
   USING (
     synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
-    OR EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin')
+    OR public.is_super_admin()
   )
   WITH CHECK (
     synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
-    OR EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid()::text AND role = 'super_admin')
+    OR public.is_super_admin()
   );
