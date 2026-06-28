@@ -96,7 +96,7 @@ export default function Dashboard() {
           <div className="stat-icon">💰</div>
           <div className="stat-body">
             <span className="stat-number">{stats.totalDebt.toLocaleString()} ₪</span>
-            <span className="stat-label">סה"כ חובות</span>
+            <span className="stat-label">מאזן</span>
           </div>
         </div>
       </div>
