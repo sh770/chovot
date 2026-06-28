@@ -10,39 +10,29 @@ export default function SetupSynagogue() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    checkFirstUser()
+    checkExistingProfile()
   }, [])
 
-  async function checkFirstUser() {
+  async function checkExistingProfile() {
     try {
-      // Check if synagogues table exists and is accessible
-      const { count, error: cErr } = await supabase
-        .from('synagogues')
-        .select('*', { count: 'exact', head: true })
-
-      if (cErr) {
-        setError('שגיאה: ' + cErr.message)
-        return
-      }
-
-      // count is 0 when table is empty OR when RLS blocks all rows
-      if (count === 0 || count === null || count === undefined) {
-        setStep('first-user')
-        return
-      }
-
-      // There are existing synagogues - check if user has a profile by email
-      const { data: existing } = await supabase
+      // Check if user already has a profile by email
+      const { data: existing, error: pErr } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', session.user.email)
         .maybeSingle()
 
+      if (pErr) {
+        // If RLS blocks, assume no profile and let user create one
+        setStep('create-synagogue')
+        return
+      }
+
       if (existing) {
         setStep('link-account')
         setForm(f => ({ ...f, name: existing.name || '' }))
       } else {
-        setStep('no-access')
+        setStep('create-synagogue')
       }
     } catch (err) {
       setError('שגיאה: ' + err.message)
@@ -118,14 +108,14 @@ export default function SetupSynagogue() {
     )
   }
 
-  if (step === 'first-user') {
+  if (step === 'create-synagogue') {
     return (
       <div className="login-page">
         <div className="login-card">
           <div className="login-icon">🕍</div>
           <h1>ברוך הבא!</h1>
-          <p className="login-subtitle">אתה המשתמש הראשון</p>
-          <p className="login-desc">הגדר את בית הכנסת שלך והיה מנהל המערכת</p>
+          <p className="login-subtitle">הקמת בית כנסת חדש</p>
+          <p className="login-desc">מלא את הפרטים כדי ליצור בית כנסת משלך ולהיות מנהל המערכת שלו</p>
           {error && <div className="error-msg">{error}</div>}
           <form onSubmit={createFirstSynagogue}>
             <div className="form-group">
@@ -178,39 +168,15 @@ export default function SetupSynagogue() {
     )
   }
 
-  if (error && step === 'no-access') {
-    return (
-      <div className="login-page">
-        <div className="login-card">
-          <div className="login-icon">⚠️</div>
-          <h1>שגיאה</h1>
-          <p className="login-desc">{error}</p>
-          <button className="btn btn-google" onClick={() => window.location.reload()}>
-            נסה שוב
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // no-access
+  // error fallback
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-icon">⏳</div>
-        <h1>ממתין לאישור</h1>
-        <p className="login-desc">
-          חשבונך עדיין לא אושר. פנה למנהל המערכת כדי לקבל גישה.
-        </p>
-        <p className="login-desc" style={{ fontSize: '0.85rem', marginTop: 8, direction: 'ltr' }}>
-          {session.user.email}
-        </p>
-        <button
-          className="btn btn-secondary"
-          style={{ width: '100%', marginTop: 16 }}
-          onClick={() => supabase.auth.signOut()}
-        >
-          התנתק
+        <div className="login-icon">⚠️</div>
+        <h1>שגיאה</h1>
+        <p className="login-desc">{error || 'אירעה שגיאה לא צפויה'}</p>
+        <button className="btn btn-google" onClick={() => window.location.reload()}>
+          נסה שוב
         </button>
       </div>
     </div>
