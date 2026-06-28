@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Members from './pages/Members'
 import MemberDetail from './pages/MemberDetail'
 import AdminPanel from './pages/AdminPanel'
+import MyAccount from './pages/MyAccount'
 import Navbar from './components/Navbar'
 
 function SetupNeeded() {
@@ -54,10 +55,21 @@ function App() {
 
   if (!session) return <Login />
 
-  // User logged in but has no profile → setup page
-  if (!profile) return <SetupSynagogue />
+  // User logged in but has no profile or hasn't been approved yet → setup page
+  if (!profile || !profile.synagogue_id) return <SetupSynagogue />
 
-  // Main app - user has a profile
+  // Member user - personal account view only
+  if (profile.role === 'member') {
+    return (
+      <div className="app-layout">
+        <main className="main-content">
+          <MyAccount />
+        </main>
+      </div>
+    )
+  }
+
+  // Admin / super_admin - full management app
   return (
     <div className="app-layout">
       <Navbar />

@@ -16,8 +16,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   user_id TEXT UNIQUE NOT NULL,
   email TEXT NOT NULL,
   name TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
   synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE SET NULL,
-  role TEXT DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin')),
+  member_id BIGINT REFERENCES members(id) ON DELETE SET NULL,
+  role TEXT DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'member')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -33,6 +35,33 @@ AS $$
     SELECT 1 FROM profiles
     WHERE user_id = auth.uid()::text AND role = 'super_admin'
   );
+$$;
+
+-- פונקציה לחיפוש פרופיל לפי אימייל (ללא RLS) - למשתמשים חדשים שמתחברים לפרופיל קיים
+CREATE OR REPLACE FUNCTION public.find_profile_by_email(user_email TEXT)
+RETURNS TABLE(id BIGINT, user_id TEXT, email TEXT, name TEXT, phone TEXT, synagogue_id BIGINT, role TEXT, created_at TIMESTAMPTZ)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT id, user_id, email, name, phone, synagogue_id, role, created_at
+  FROM profiles
+  WHERE email = user_email
+  LIMIT 1;
+$$;
+
+-- פונקציה להצגת רשימת בתי כנסת (ללא RLS) למשתמשים חדשים
+CREATE OR REPLACE FUNCTION public.list_synagogues()
+RETURNS TABLE(id BIGINT, name TEXT, created_at TIMESTAMPTZ)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT id, name, created_at
+  FROM synagogues
+  ORDER BY name;
 $$;
 
 -- 4. הוספת synagogue_id לטבלאות קיימות
@@ -58,10 +87,10 @@ DROP POLICY IF EXISTS "profiles_super_admin_all" ON profiles;
 DROP POLICY IF EXISTS "super_admin_all_synagogues" ON synagogues;
 
 -- Synagogues
--- כל משתמש מחובר יכול ליצור בית כנסת חדש (להרשמה ראשונית)
-CREATE POLICY "anyone_insert_synagogue"
+-- (משתמשים רגילים מצטרפים דרך רשימת בתי הכנסת)
+CREATE POLICY "super_admin_insert_synagogue"
   ON synagogues FOR INSERT TO authenticated
-  WITH CHECK (true);
+  WITH CHECK (public.is_super_admin());
 
 -- סופר אדמין יכול לעדכן ולמחוק
 CREATE POLICY "super_admin_all_synagogues"

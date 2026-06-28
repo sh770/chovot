@@ -14,6 +14,7 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
+  const [pendingUsers, setPendingUsers] = useState([])
 
   useEffect(() => { loadData() }, [])
 
@@ -21,6 +22,14 @@ export default function AdminPanel() {
     try {
       const { data: s } = await supabase.from('synagogues').select('*').order('name')
       setSynagogues(s || [])
+
+      // Load pending users (profile with no synagogue)
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('id, user_id, email, name, phone, role, created_at')
+        .is('synagogue_id', null)
+        .neq('role', 'member')
+      setPendingUsers(p || [])
 
       // Load admins for each synagogue
       const adminsMap = {}
@@ -122,6 +131,41 @@ export default function AdminPanel() {
     }
   }
 
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [approveName, setApproveName] = useState('')
+
+  async function approvePending(profileId, requestedName) {
+    if (!requestedName.trim()) return
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      // Create synagogue with the requested name
+      const { data: syn, error: sErr } = await supabase
+        .from('synagogues')
+        .insert({ name: requestedName.trim() })
+        .select()
+        .single()
+      if (sErr) throw sErr
+
+      // Update the profile: assign to new synagogue as admin
+      const { error: uErr } = await supabase
+        .from('profiles')
+        .update({ synagogue_id: syn.id, role: 'admin' })
+        .eq('id', profileId)
+      if (uErr) throw uErr
+
+      setApproveTarget(null)
+      setApproveName('')
+      await loadData()
+      setMessage(`הבקשה אושרה! בית הכנסת "${syn.name}" נוצר והמשמש קיבל גישה`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function removeAdmin(adminId, email) {
     if (!window.confirm(`להסיר את ${email} מהניהול?`)) return
     try {
@@ -142,6 +186,80 @@ export default function AdminPanel() {
 
       {error && <div className="error-msg">{error}</div>}
       {message && <div className="success-msg">{message}</div>}
+
+      {pendingUsers.length > 0 && (
+        <div className="section">
+          <div className="section-header">
+            <h2>בקשות גישה ממתינות ({pendingUsers.length})</h2>
+          </div>
+          <div className="pending-list">
+            {pendingUsers.map(u => (
+              <div key={u.id} className="pending-item">
+                <div className="pending-info">
+                  <span className="pending-name">{u.name}</span>
+                  <span className="pending-email">{u.email}</span>
+                  <span className="pending-date">
+                    {new Date(u.created_at).toLocaleDateString('he-IL')}
+                  </span>
+                </div>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => { setApproveTarget(u); setApproveName('') }}
+                >
+                  אשר
+                </button>
+                <button
+                  className="btn-icon danger"
+                  onClick={async () => {
+                    if (window.confirm(`למחוק את בקשת ${u.name}?`)) {
+                      await supabase.from('profiles').delete().eq('id', u.id)
+                      await loadData()
+                    }
+                  }}
+                  title="דחה בקשה"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* אישור בקשה - חלונית לבחירת שם בית כנסת */}
+      {approveTarget && (
+        <div className="modal-overlay" onClick={() => setApproveTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>אישור בקשה</h3>
+            <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
+              אשר את {approveTarget.name} ({approveTarget.email}) כמנהל בית כנסת חדש
+            </p>
+            <div className="form-group">
+              <label>שם בית הכנסת</label>
+              <input
+                type="text"
+                placeholder="בית כנסת..."
+                value={approveName}
+                onChange={e => setApproveName(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <div className="form-buttons">
+              <button
+                className="btn btn-primary"
+                onClick={() => approvePending(approveTarget.id, approveName)}
+                disabled={saving || !approveName.trim()}
+              >
+                {saving ? 'יוצר...' : 'צור בית כנסת ואשר'}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setApproveTarget(null)}>
+                בטל
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="section">
         <div className="section-header">

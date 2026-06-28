@@ -39,6 +39,7 @@ DROP POLICY IF EXISTS "profiles_own" ON profiles;
 DROP POLICY IF EXISTS "profiles_super_admin_all" ON profiles;
 -- synagogues
 DROP POLICY IF EXISTS "anyone_insert_synagogue" ON synagogues;
+DROP POLICY IF EXISTS "super_admin_insert_synagogue" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_all_synagogues" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_delete_synagogue" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_read_synagogue" ON synagogues;
@@ -76,9 +77,9 @@ CREATE POLICY "profiles_delete_super_admin"
   USING (public.is_super_admin());
 
 -- 4. פוליסיס לטבלת synagogues (באמצעות הפונקציה)
-CREATE POLICY "anyone_insert_synagogue"
+CREATE POLICY "super_admin_insert_synagogue"
   ON synagogues FOR INSERT TO authenticated
-  WITH CHECK (true);
+  WITH CHECK (public.is_super_admin());
 
 CREATE POLICY "super_admin_all_synagogues"
   ON synagogues FOR UPDATE TO authenticated
