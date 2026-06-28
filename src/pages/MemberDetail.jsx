@@ -244,7 +244,7 @@ export default function MemberDetail() {
                   <label>תיאור</label>
                   <input
                     type="text"
-                    placeholder="למשל: תרומה, עליה לתורה, אבול... או כתוב חופשי"
+                    placeholder="למשל: תרומה, עליה לתורה... או כתוב חופשי"
                     value={form.description}
                     onChange={e => setForm({ ...form, description: e.target.value })}
                     required
