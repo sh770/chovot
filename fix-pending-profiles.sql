@@ -3,6 +3,9 @@
 -- נדרש כדי שמשתמש חדש יוכל להתחבר לפרופיל שנוצר ע"י המנהל
 -- ==========================================================
 
+-- קודם נוודא שהעמודה קיימת
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+
 CREATE OR REPLACE FUNCTION public.find_profile_by_email(user_email TEXT)
 RETURNS TABLE(id BIGINT, user_id TEXT, email TEXT, name TEXT, phone TEXT, synagogue_id BIGINT, role TEXT, created_at TIMESTAMPTZ)
 LANGUAGE sql
