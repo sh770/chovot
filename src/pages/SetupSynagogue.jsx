@@ -59,7 +59,20 @@ export default function SetupSynagogue() {
     setSaving(true)
     setError(null)
     try {
-      // Step 1: Create member record
+      // Step 1: Create profile with synagogue_id first (so RLS passes for member insert)
+      const { error: pErr } = await supabase
+        .from('profiles')
+        .insert({
+          user_id: session.user.id,
+          email: session.user.email,
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          synagogue_id: selectedSynagogue,
+          role: 'member'
+        })
+      if (pErr) throw new Error(pErr.message)
+
+      // Step 2: Create member record (RLS passes because profile has synagogue_id)
       const { data: member, error: mErr } = await supabase
         .from('members')
         .insert({
@@ -71,19 +84,12 @@ export default function SetupSynagogue() {
         .single()
       if (mErr) throw new Error(mErr.message)
 
-      // Step 2: Create profile linked to member
-      const { error: pErr } = await supabase
+      // Step 3: Link member to profile
+      const { error: uErr } = await supabase
         .from('profiles')
-        .insert({
-          user_id: session.user.id,
-          email: session.user.email,
-          name: form.name.trim(),
-          phone: form.phone.trim(),
-          synagogue_id: selectedSynagogue,
-          member_id: member.id,
-          role: 'member'
-        })
-      if (pErr) throw new Error(pErr.message)
+        .update({ member_id: member.id })
+        .eq('user_id', session.user.id)
+      if (uErr) throw new Error(uErr.message)
 
       await refreshProfile()
     } catch (err) {
@@ -124,9 +130,10 @@ export default function SetupSynagogue() {
     setError(null)
     try {
       const { error } = await supabase
-        .from('profiles')
-        .update({ user_id: session.user.id })
-        .eq('email', session.user.email)
+        .rpc('link_my_account', {
+          target_email: session.user.email,
+          new_user_id: session.user.id
+        })
       if (error) throw new Error(error.message)
       await refreshProfile()
     } catch (err) {

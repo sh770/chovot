@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## שפה
+- תמיד תסביר ותענה בעברית, אלא אם ההנחיה עצמה כתובה באנגלית
+- קוד, שמות משתנים, והערות בקוד - נשארים בשפה המקורית שלהם
+
 ## Commands
 
 ```bash

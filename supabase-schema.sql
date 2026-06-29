@@ -64,6 +64,19 @@ AS $$
   ORDER BY name;
 $$;
 
+-- פונקציה לחיבור חשבון קיים - מעדכנת user_id בפרופיל (ללא RLS)
+CREATE OR REPLACE FUNCTION public.link_my_account(target_email TEXT, new_user_id TEXT)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE profiles
+  SET user_id = new_user_id
+  WHERE email = target_email
+    AND (user_id IS NULL OR user_id = '' OR user_id LIKE 'pending_%');
+$$;
+
 -- 4. הוספת synagogue_id לטבלאות קיימות
 ALTER TABLE members ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
 ALTER TABLE debts ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
@@ -78,6 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_profiles_synagogue ON profiles(synagogue_id);
 -- 5. הפעלת RLS
 ALTER TABLE synagogues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE debts ENABLE ROW LEVEL SECURITY;
 
 -- 6. מחיקת מדיניות ישנה ויצירת חדשה
 DROP POLICY IF EXISTS "authenticated_all_members" ON members;

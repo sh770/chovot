@@ -11,6 +11,7 @@ export default function Members() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', notes: '' })
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
 
   useEffect(() => {
@@ -65,9 +66,10 @@ export default function Members() {
       })
       setForm({ name: '', phone: '', notes: '' })
       setShowForm(false)
+      setError(null)
       await loadMembers()
     } catch (err) {
-      console.error(err)
+      setError(err.message || 'שגיאה בהוספת מתפלל')
     } finally {
       setSaving(false)
     }
@@ -78,6 +80,7 @@ export default function Members() {
     try {
       await supabase.from('debts').delete().eq('member_id', id)
       await supabase.from('members').delete().eq('id', id)
+      setError(null)
       await loadMembers()
     } catch (err) {
       console.error(err)
@@ -147,6 +150,8 @@ export default function Members() {
           </div>
         </div>
       )}
+
+      {error && <div className="error-msg">{error}</div>}
 
       <div className="search-wrapper">
         <input

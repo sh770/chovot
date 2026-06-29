@@ -39,9 +39,26 @@ AS $$
   ORDER BY name;
 $$;
 
+-- פונקציה לחיבור חשבון קיים - מעדכנת user_id בפרופיל (ללא RLS)
+CREATE OR REPLACE FUNCTION public.link_my_account(target_email TEXT, new_user_id TEXT)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE profiles
+  SET user_id = new_user_id
+  WHERE email = target_email
+    AND (user_id IS NULL OR user_id = '' OR user_id LIKE 'pending_%');
+$$;
+
 -- 3. הגבלת יצירת בתי כנסת לסופר אדמין בלבד
 DROP POLICY IF EXISTS "anyone_insert_synagogue" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_insert_synagogue" ON synagogues;
 CREATE POLICY "super_admin_insert_synagogue"
   ON synagogues FOR INSERT TO authenticated
   WITH CHECK (public.is_super_admin());
+
+-- 4. הפעלת RLS (במידה ועדיין לא הופעל)
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE debts ENABLE ROW LEVEL SECURITY;
