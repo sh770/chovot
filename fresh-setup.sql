@@ -12,6 +12,7 @@
 CREATE TABLE IF NOT EXISTS synagogues (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name TEXT NOT NULL,
+  payment_link TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -48,6 +49,18 @@ CREATE TABLE IF NOT EXISTS profiles (
   member_id BIGINT REFERENCES members(id) ON DELETE SET NULL,
   role TEXT DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'member')),
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 1ה. אישורי תשלום (חבר מדווח על תשלום שביצע, מנהל מאשר)
+CREATE TABLE IF NOT EXISTS payment_confirmations (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  debt_id BIGINT REFERENCES debts(id) ON DELETE CASCADE,
+  member_id BIGINT REFERENCES members(id) ON DELETE CASCADE,
+  amount_paid DECIMAL(10,2) NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  approved_at TIMESTAMPTZ,
+  synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE
 );
 
 
@@ -166,6 +179,9 @@ CREATE INDEX IF NOT EXISTS idx_debts_member ON debts(member_id);
 CREATE INDEX IF NOT EXISTS idx_debts_synagogue ON debts(synagogue_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_user ON profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_synagogue ON profiles(synagogue_id);
+CREATE INDEX IF NOT EXISTS idx_payconf_synagogue_id ON payment_confirmations(synagogue_id);
+CREATE INDEX IF NOT EXISTS idx_payconf_member_id ON payment_confirmations(member_id);
+CREATE INDEX IF NOT EXISTS idx_payconf_status ON payment_confirmations(status);
 
 
 -- ==========================================================
@@ -176,6 +192,7 @@ ALTER TABLE synagogues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE debts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_confirmations ENABLE ROW LEVEL SECURITY;
 
 
 -- ==========================================================
@@ -203,6 +220,9 @@ DROP POLICY IF EXISTS "authenticated_all_members" ON members;
 -- debts
 DROP POLICY IF EXISTS "debts_synagogue_access" ON debts;
 DROP POLICY IF EXISTS "authenticated_all_debts" ON debts;
+-- payment_confirmations
+DROP POLICY IF EXISTS "confirmations_synagogue_access" ON payment_confirmations;
+DROP POLICY IF EXISTS "confirmations_member_own" ON payment_confirmations;
 
 
 -- ==========================================================
@@ -269,6 +289,18 @@ CREATE POLICY "members_synagogue_access"
 -- 6ד. debts
 CREATE POLICY "debts_synagogue_access"
   ON debts FOR ALL TO authenticated
+  USING (
+    synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
+    OR public.is_super_admin()
+  )
+  WITH CHECK (
+    synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
+    OR public.is_super_admin()
+  );
+
+-- 6ה. payment_confirmations
+CREATE POLICY "confirmations_synagogue_access"
+  ON payment_confirmations FOR ALL TO authenticated
   USING (
     synagogue_id IN (SELECT synagogue_id FROM profiles WHERE user_id = auth.uid()::text)
     OR public.is_super_admin()

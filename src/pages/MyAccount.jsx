@@ -8,6 +8,13 @@ export default function MyAccount() {
   const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [reportDebt, setReportDebt] = useState(null)
+  const [reportAmount, setReportAmount] = useState('')
+  const [reportSaving, setReportSaving] = useState(false)
+  const [reportError, setReportError] = useState(null)
+  const [reportSuccess, setReportSuccess] = useState(false)
+  const [confirmations, setConfirmations] = useState([])
+  const [showConfirmations, setShowConfirmations] = useState(false)
 
   useEffect(() => {
     if (profile?.member_id) loadData()
@@ -34,10 +41,41 @@ export default function MyAccount() {
         .eq('member_id', profile.member_id)
         .order('created_at', { ascending: false })
       setDebts(d || [])
+
+      const { data: c } = await supabase
+        .from('payment_confirmations')
+        .select('*')
+        .eq('member_id', profile.member_id)
+        .order('created_at', { ascending: false })
+      setConfirmations(c || [])
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function reportPayment(e) {
+    e.preventDefault()
+    if (!reportAmount || parseFloat(reportAmount) <= 0) return
+    setReportSaving(true)
+    setReportError(null)
+    setReportSuccess(false)
+    try {
+      const { error } = await supabase.from('payment_confirmations').insert({
+        debt_id: reportDebt.id,
+        member_id: profile.member_id,
+        amount_paid: parseFloat(reportAmount),
+        status: 'pending',
+        synagogue_id: profile.synagogue_id
+      })
+      if (error) throw error
+      setReportSuccess(true)
+      await loadData()
+    } catch (err) {
+      setReportError(err.message || 'שגיאה בדיווח תשלום')
+    } finally {
+      setReportSaving(false)
     }
   }
 
@@ -126,6 +164,9 @@ export default function MyAccount() {
                 } catch { return '' }
               }
 
+              const pendingConf = confirmations.find(c => c.debt_id === d.id && c.status === 'pending')
+              const remaining = total - paid
+
               return (
                 <div key={d.id} className={`debt-item ${isFullyPaid ? 'debt-paid' : ''}`}>
                   <div className="debt-status">
@@ -137,10 +178,11 @@ export default function MyAccount() {
                     <span className="debt-amount">{total.toLocaleString()} ₪</span>
                     {isPartial && (
                       <span className="debt-partial">
-                        שולם {paid.toLocaleString()} ₪ · נשאר {(total - paid).toLocaleString()} ₪
+                        שולם {paid.toLocaleString()} ₪ · נשאר {remaining.toLocaleString()} ₪
                       </span>
                     )}
                     {isFullyPaid && <span className="debt-paid-label">שולם במלואו</span>}
+                    {pendingConf && <span className="debt-pending-label">⏳ ממתין לאישור מנהל</span>}
                     <span className="debt-desc">{d.description}</span>
                     <span className="debt-date">
                       {new Date(d.created_at).toLocaleDateString('he-IL', {
@@ -149,9 +191,92 @@ export default function MyAccount() {
                     </span>
                     <span className="debt-date-hebrew">{formatHebrewDate(d.created_at)}</span>
                   </div>
+                  {!isFullyPaid && !pendingConf && (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => { setReportDebt(d); setReportAmount(String(remaining)); setReportError(null); setReportSuccess(false); }}
+                      style={{ fontSize: '0.75rem', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                    >
+                      דווח תשלום
+                    </button>
+                  )}
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {confirmations.filter(c => c.status === 'pending').length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setShowConfirmations(!showConfirmations)}
+            >
+              {showConfirmations ? 'הסתר' : 'הצג'} דיווחי תשלום ממתינים ({confirmations.filter(c => c.status === 'pending').length})
+            </button>
+            {showConfirmations && (
+              <div className="debts-list" style={{ marginTop: 8 }}>
+                {confirmations.filter(c => c.status === 'pending').map(c => {
+                  const debt = debts.find(d => d.id === c.debt_id)
+                  return (
+                    <div key={c.id} className="debt-item" style={{ opacity: 0.7 }}>
+                      <div className="debt-info">
+                        <span className="debt-amount">{Number(c.amount_paid).toLocaleString()} ₪</span>
+                        <span className="debt-desc">{debt?.description || 'חוב'}</span>
+                        <span className="debt-date">
+                          דווח: {new Date(c.created_at).toLocaleDateString('he-IL')}
+                        </span>
+                        <span className="debt-pending-label">⏳ ממתין לאישור</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* דיווח תשלום */}
+        {reportDebt && (
+          <div className="modal-overlay" onClick={() => setReportDebt(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <h3>💰 דיווח תשלום</h3>
+              <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
+                {reportDebt.description} — {Number(reportDebt.amount).toLocaleString()} ₪
+              </p>
+
+              {reportSuccess ? (
+                <div className="success-msg" style={{ marginBottom: 0 }}>
+                  ✅ דיווח התקבל! המנהל יאשר אותו בקרוב.
+                </div>
+              ) : (
+                <form onSubmit={reportPayment}>
+                  {reportError && <div className="error-msg">{reportError}</div>}
+                  <div className="form-group">
+                    <label>סכום ששולם (₪)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={Number(reportDebt.amount)}
+                      placeholder="0.00"
+                      value={reportAmount}
+                      onChange={e => setReportAmount(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <div className="form-buttons">
+                    <button className="btn btn-primary" type="submit" disabled={reportSaving}>
+                      {reportSaving ? 'שולח...' : 'דווח תשלום'}
+                    </button>
+                    <button className="btn btn-secondary" type="button" onClick={() => setReportDebt(null)}>
+                      בטל
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         )}
       </div>

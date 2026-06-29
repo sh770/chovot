@@ -22,6 +22,8 @@ export default function MemberDetail() {
   const [accessSaving, setAccessSaving] = useState(false)
   const [accessError, setAccessError] = useState(null)
   const [accessSuccess, setAccessSuccess] = useState(false)
+  const [confirmations, setConfirmations] = useState([])
+  const [approving, setApproving] = useState(null) // confirmation id being approved
 
   function getPaidAmount(d) {
     // Fallback: if paid_amount column doesn't exist yet, use old 'paid' boolean
@@ -62,6 +64,13 @@ export default function MemberDetail() {
       setMember(m)
       setDebts(d || [])
       setMemberForm({ name: m.name, phone: m.phone || '', notes: m.notes || '' })
+
+      const { data: c } = await supabase
+        .from('payment_confirmations')
+        .select('*')
+        .eq('member_id', id)
+        .order('created_at', { ascending: false })
+      setConfirmations(c || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -203,10 +212,62 @@ export default function MemberDetail() {
       msg += '\n✅ אין חובות פתוחים. תודה!\n'
     }
 
+    // לינק לתשלום חיצוני (אם הוגדר בהגדרות בית הכנסת)
+    if (synagogue?.payment_link) {
+      msg += `\n🔗 לשלם באינטרנט:\n${synagogue.payment_link}\n`
+    }
+
+    // לינק לדיווח תשלום אישי
+    const appUrl = window.location.origin
+    msg += `\n📱 לדיווח תשלום:\n${appUrl}\n`
+
     msg += `\nבכבוד רב,\n${synagogue?.name || 'בית הכנסת'}`
 
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
     window.open(url, '_blank')
+  }
+
+  async function approvePayment(conf) {
+    setApproving(conf.id)
+    try {
+      // Update the debt
+      const debt = debts.find(d => d.id === conf.debt_id)
+      if (!debt) throw new Error('חוב לא נמצא')
+      const newPaid = getPaidAmount(debt) + Number(conf.amount_paid)
+      const isFullyPaid = newPaid >= Number(debt.amount)
+
+      await supabase.from('debts').update({
+        paid_amount: newPaid,
+        paid: isFullyPaid
+      }).eq('id', conf.debt_id)
+
+      // Update confirmation status
+      await supabase.from('payment_confirmations').update({
+        status: 'approved',
+        approved_at: new Date().toISOString()
+      }).eq('id', conf.id)
+
+      await loadData()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setApproving(null)
+    }
+  }
+
+  async function rejectPayment(confId) {
+    if (!window.confirm('לדחות דיווח תשלום זה?')) return
+    setApproving(confId)
+    try {
+      await supabase.from('payment_confirmations').update({
+        status: 'rejected'
+      }).eq('id', confId)
+      await loadData()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setApproving(null)
+    }
   }
 
   if (loading) {
@@ -424,6 +485,52 @@ export default function MemberDetail() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* דיווחי תשלום ממתינים */}
+        {confirmations.filter(c => c.status === 'pending').length > 0 && (
+          <div className="section">
+            <div className="section-header">
+              <h2>⏳ דיווחי תשלום ממתינים ({confirmations.filter(c => c.status === 'pending').length})</h2>
+            </div>
+            <div className="debts-list">
+              {confirmations.filter(c => c.status === 'pending').map(c => {
+                const debt = debts.find(d => d.id === c.debt_id)
+                return (
+                  <div key={c.id} className="debt-item">
+                    <div className="debt-info">
+                      <span className="debt-amount" style={{ color: 'var(--warning)' }}>
+                        {Number(c.amount_paid).toLocaleString()} ₪
+                      </span>
+                      <span className="debt-desc">{debt?.description || 'חוב'}</span>
+                      <span className="debt-date">
+                        דווח: {new Date(c.created_at).toLocaleDateString('he-IL', {
+                          year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => approvePayment(c)}
+                        disabled={approving === c.id}
+                      >
+                        {approving === c.id ? 'מאשר...' : 'אשר'}
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                        onClick={() => rejectPayment(c.id)}
+                        disabled={approving === c.id}
+                      >
+                        דחה
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

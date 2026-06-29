@@ -15,6 +15,8 @@ export default function AdminPanel() {
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
   const [pendingUsers, setPendingUsers] = useState([])
+  const [editPaymentLink, setEditPaymentLink] = useState({ id: null, value: '' })
+  const [linkSaving, setLinkSaving] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -316,6 +318,60 @@ export default function AdminPanel() {
                   <button className="btn-icon danger" onClick={() => deleteSynagogue(syn.id, syn.name)}>
                     🗑️
                   </button>
+                </div>
+
+                <div className="synagogue-payment">
+                  <div className="payment-header">
+                    <span>לינק לתשלום:</span>
+                    {editPaymentLink.id === syn.id ? (
+                      <div className="payment-edit">
+                        <input
+                          type="url"
+                          dir="ltr"
+                          placeholder="https://paypal.me/..."
+                          value={editPaymentLink.value}
+                          onChange={e => setEditPaymentLink({ ...editPaymentLink, value: e.target.value })}
+                          className="edit-input"
+                          style={{ fontSize: '0.82rem', padding: '6px 10px', marginBottom: 4 }}
+                        />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            disabled={linkSaving}
+                            onClick={async () => {
+                              setLinkSaving(true)
+                              await supabase.from('synagogues').update({ payment_link: editPaymentLink.value }).eq('id', syn.id)
+                              setEditPaymentLink({ id: null, value: '' })
+                              setLinkSaving(false)
+                              await loadData()
+                            }}
+                          >
+                            {linkSaving ? 'שומר...' : 'שמור'}
+                          </button>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setEditPaymentLink({ id: null, value: '' })}>
+                            בטל
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="payment-display">
+                        {syn.payment_link ? (
+                          <a href={syn.payment_link} target="_blank" rel="noopener noreferrer" className="payment-link">
+                            {syn.payment_link}
+                          </a>
+                        ) : (
+                          <span className="payment-empty">לא הוגדר</span>
+                        )}
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                          onClick={() => setEditPaymentLink({ id: syn.id, value: syn.payment_link || '' })}
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="synagogue-admins">

@@ -399,6 +399,57 @@ a {
   font-size: 0.85rem;
 }
 
+/* ============================
+   Payment Link (Admin)
+   ============================ */
+.synagogue-payment {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.payment-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.payment-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-link {
+  font-size: 0.8rem;
+  color: var(--primary-light);
+  text-decoration: underline;
+  font-weight: 400;
+  direction: ltr;
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-link:hover {
+  color: var(--primary);
+}
+
+.payment-empty {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.payment-edit {
+  width: 100%;
+}
+
 .admin-email {
   flex: 1;
   direction: ltr;
@@ -1019,6 +1070,12 @@ a {
 .debt-paid-label {
   font-size: 0.78rem;
   color: var(--success);
+  font-weight: 500;
+}
+
+.debt-pending-label {
+  font-size: 0.78rem;
+  color: var(--warning);
   font-weight: 500;
 }
 
