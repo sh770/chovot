@@ -7,11 +7,17 @@ export default function MyAccount() {
   const [member, setMember] = useState(null)
   const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   useEffect(() => {
     if (profile?.member_id) loadData()
     else setLoading(false)
   }, [profile])
+
+  async function handleLogout() {
+    setLoggingOut(true)
+    await supabase.auth.signOut()
+  }
 
   async function loadData() {
     try {
@@ -48,6 +54,17 @@ export default function MyAccount() {
 
   return (
     <div className="my-account">
+      <div className="my-account-header">
+        <h2 className="my-account-title">החשבון שלי</h2>
+        <button
+          className="btn btn-sm btn-secondary my-account-logout"
+          onClick={handleLogout}
+          disabled={loggingOut}
+        >
+          {loggingOut ? 'מתנתק...' : 'התנתק'}
+        </button>
+      </div>
+
       <div className="member-header" style={{ marginBottom: 20 }}>
         <div className="member-header-main">
           {member && (

@@ -109,6 +109,53 @@ AS $$
     AND (user_id IS NULL OR user_id = '' OR user_id LIKE 'pending_%');
 $$;
 
+-- 2ה. יצירת פרופיל חבר ע"י מנהל (יוצרת גישת התחברות אישית למתפלל)
+CREATE OR REPLACE FUNCTION public.create_member_profile(
+  p_email TEXT,
+  p_name TEXT,
+  p_member_id BIGINT,
+  p_synagogue_id BIGINT
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller_synagogue_id BIGINT;
+  v_caller_role TEXT;
+  v_new_profile_id BIGINT;
+BEGIN
+  -- בדוק שהקורא הוא מנהל או סופר אדמין
+  SELECT synagogue_id, role INTO v_caller_synagogue_id, v_caller_role
+  FROM profiles
+  WHERE user_id = auth.uid()::text
+    AND (role = 'admin' OR role = 'super_admin')
+    AND synagogue_id IS NOT NULL;
+
+  IF v_caller_synagogue_id IS NULL THEN
+    RAISE EXCEPTION 'רק מנהלים יכולים ליצור גישת התחברות';
+  END IF;
+
+  -- סופר אדמין יכול ליצור לכל בית כנסת, מנהל רגיל רק לבית הכנסת שלו
+  IF v_caller_synagogue_id != p_synagogue_id AND v_caller_role != 'super_admin' THEN
+    RAISE EXCEPTION 'ניתן ליצור גישה רק למתפללים בבית הכנסת שלך';
+  END IF;
+
+  -- בדוק אם כבר קיים פרופיל עם האימייל הזה
+  IF EXISTS (SELECT 1 FROM profiles WHERE email = p_email) THEN
+    RAISE EXCEPTION 'כבר קיים פרופיל עם האימייל הזה';
+  END IF;
+
+  -- צור פרופיל חבר
+  INSERT INTO profiles (user_id, email, name, synagogue_id, member_id, role)
+  VALUES ('pending_' || extract(epoch from now()), p_email, p_name, p_synagogue_id, p_member_id, 'member')
+  RETURNING id INTO v_new_profile_id;
+
+  RETURN v_new_profile_id;
+END;
+$$;
+
 
 -- ==========================================================
 -- 3. אינדקסים

@@ -77,6 +77,53 @@ AS $$
     AND (user_id IS NULL OR user_id = '' OR user_id LIKE 'pending_%');
 $$;
 
+-- פונקציה ליצירת פרופיל חבר ע"י מנהל - יוצרת גישת התחברות למתפלל ספציפי
+CREATE OR REPLACE FUNCTION public.create_member_profile(
+  p_email TEXT,
+  p_name TEXT,
+  p_member_id BIGINT,
+  p_synagogue_id BIGINT
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller_synagogue_id BIGINT;
+  v_caller_role TEXT;
+  v_new_profile_id BIGINT;
+BEGIN
+  -- בדוק שהקורא הוא מנהל או סופר אדמין
+  SELECT synagogue_id, role INTO v_caller_synagogue_id, v_caller_role
+  FROM profiles
+  WHERE user_id = auth.uid()::text
+    AND (role = 'admin' OR role = 'super_admin')
+    AND synagogue_id IS NOT NULL;
+
+  IF v_caller_synagogue_id IS NULL THEN
+    RAISE EXCEPTION 'רק מנהלים יכולים ליצור גישת התחברות';
+  END IF;
+
+  -- סופר אדמין יכול ליצור לכל בית כנסת, מנהל רגיל רק לבית הכנסת שלו
+  IF v_caller_synagogue_id != p_synagogue_id AND v_caller_role != 'super_admin' THEN
+    RAISE EXCEPTION 'ניתן ליצור גישה רק למתפללים בבית הכנסת שלך';
+  END IF;
+
+  -- בדוק אם כבר קיים פרופיל עם האימייל הזה
+  IF EXISTS (SELECT 1 FROM profiles WHERE email = p_email) THEN
+    RAISE EXCEPTION 'כבר קיים פרופיל עם האימייל הזה';
+  END IF;
+
+  -- צור פרופיל חבר
+  INSERT INTO profiles (user_id, email, name, synagogue_id, member_id, role)
+  VALUES ('pending_' || extract(epoch from now()), p_email, p_name, p_synagogue_id, p_member_id, 'member')
+  RETURNING id INTO v_new_profile_id;
+
+  RETURN v_new_profile_id;
+END;
+$$;
+
 -- 4. הוספת synagogue_id לטבלאות קיימות
 ALTER TABLE members ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
 ALTER TABLE debts ADD COLUMN IF NOT EXISTS synagogue_id BIGINT REFERENCES synagogues(id) ON DELETE CASCADE;
@@ -99,7 +146,26 @@ DROP POLICY IF EXISTS "authenticated_all_members" ON members;
 DROP POLICY IF EXISTS "authenticated_all_debts" ON debts;
 DROP POLICY IF EXISTS "profiles_own" ON profiles;
 DROP POLICY IF EXISTS "profiles_super_admin_all" ON profiles;
+
+-- Synagogues
+DROP POLICY IF EXISTS "super_admin_insert_synagogue" ON synagogues;
 DROP POLICY IF EXISTS "super_admin_all_synagogues" ON synagogues;
+DROP POLICY IF EXISTS "super_admin_delete_synagogue" ON synagogues;
+DROP POLICY IF EXISTS "super_admin_read_synagogue" ON synagogues;
+DROP POLICY IF EXISTS "admin_read_own_synagogue" ON synagogues;
+
+-- Profiles
+DROP POLICY IF EXISTS "profiles_insert_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_select_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_update_super_admin" ON profiles;
+DROP POLICY IF EXISTS "profiles_delete_super_admin" ON profiles;
+
+-- Members
+DROP POLICY IF EXISTS "members_synagogue_access" ON members;
+
+-- Debts
+DROP POLICY IF EXISTS "debts_synagogue_access" ON debts;
 
 -- Synagogues
 -- (משתמשים רגילים מצטרפים דרך רשימת בתי הכנסת)

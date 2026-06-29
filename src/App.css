@@ -865,6 +865,27 @@ a {
   padding-top: 16px;
 }
 
+.my-account-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.my-account-title {
+  font-size: 1.2rem;
+  color: var(--primary);
+}
+
+.my-account-logout {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.my-account-logout:hover {
+  background: var(--danger-bg);
+}
+
 .back-link {
   display: inline-block;
   color: var(--primary);

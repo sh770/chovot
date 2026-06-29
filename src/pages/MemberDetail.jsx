@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function MemberDetail() {
   const { id } = useParams()
-  const { synagogueId } = useAuth()
+  const { synagogueId, synagogue } = useAuth()
   const [member, setMember] = useState(null)
   const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -17,6 +17,11 @@ export default function MemberDetail() {
   const [paymentDebt, setPaymentDebt] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentError, setPaymentError] = useState(null)
+  const [showAccessForm, setShowAccessForm] = useState(false)
+  const [accessEmail, setAccessEmail] = useState('')
+  const [accessSaving, setAccessSaving] = useState(false)
+  const [accessError, setAccessError] = useState(null)
+  const [accessSuccess, setAccessSuccess] = useState(false)
 
   function getPaidAmount(d) {
     // Fallback: if paid_amount column doesn't exist yet, use old 'paid' boolean
@@ -140,6 +145,70 @@ export default function MemberDetail() {
     }
   }
 
+  async function createMemberAccess(e) {
+    e.preventDefault()
+    if (!accessEmail.trim()) return
+    setAccessSaving(true)
+    setAccessError(null)
+    setAccessSuccess(false)
+    try {
+      const { error } = await supabase.rpc('create_member_profile', {
+        p_email: accessEmail.trim(),
+        p_name: member.name,
+        p_member_id: member.id,
+        p_synagogue_id: synagogueId
+      })
+      if (error) throw error
+      setAccessSuccess(true)
+    } catch (err) {
+      setAccessError(err.message || 'שגיאה ביצירת גישה')
+    } finally {
+      setAccessSaving(false)
+    }
+  }
+
+  function formatPhone(phone) {
+    // נרמול מספר טלפון לפורמט בינלאומי
+    if (!phone) return null
+    let p = phone.replace(/[^0-9]/g, '')
+    if (p.startsWith('972')) return p
+    if (p.startsWith('0')) return '972' + p.slice(1)
+    if (p.startsWith('5')) return '972' + p
+    return p
+  }
+
+  function sendWhatsApp() {
+    const phone = formatPhone(member?.phone)
+    if (!phone) return
+
+    const unpaidDebts = debts.filter(d => getPaidAmount(d) < Number(d.amount))
+    const paidTotal_ = debts.reduce((s, d) => s + getPaidAmount(d), 0)
+    const unpaidTotal_ = totalDebt - paidTotal_
+
+    let msg = `שלום ${member.name}!\n\n`
+    msg += `📋 מצב החובות שלך בבית הכנסת${synagogue ? ` ${synagogue.name}` : ''}:\n`
+    msg += `סה"כ חוב: ${totalDebt.toLocaleString()} ₪\n`
+    msg += `שולם: ${paidTotal_.toLocaleString()} ₪\n`
+    msg += `יתרה לתשלום: ${unpaidTotal_.toLocaleString()} ₪\n`
+
+    if (unpaidDebts.length > 0) {
+      msg += '\n📌 פירוט חובות שטרם שולמו:\n'
+      unpaidDebts.forEach((d, i) => {
+        const remaining = Number(d.amount) - getPaidAmount(d)
+        msg += `${i + 1}. ${d.description} — ${remaining.toLocaleString()} ₪\n`
+      })
+    }
+
+    if (unpaidTotal_ <= 0) {
+      msg += '\n✅ אין חובות פתוחים. תודה!\n'
+    }
+
+    msg += `\nבכבוד רב,\n${synagogue?.name || 'בית הכנסת'}`
+
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank')
+  }
+
   if (loading) {
     return <div className="loading"><div className="spinner"></div></div>
   }
@@ -202,9 +271,26 @@ export default function MemberDetail() {
                 <h1>{member.name}</h1>
                 {member.phone && <p className="member-phone">📞 {member.phone}</p>}
                 {member.notes && <p className="member-notes">{member.notes}</p>}
-                <button className="btn btn-sm btn-secondary" onClick={() => setEditMember(true)}>
-                  ✏️ ערוך
-                </button>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-sm btn-secondary" onClick={() => setEditMember(true)}>
+                    ✏️ ערוך
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => { setAccessEmail(''); setAccessError(null); setAccessSuccess(false); setShowAccessForm(true); }}
+                    title="צור גישת התחברות למתפלל זה"
+                  >
+                    🔗 צור גישה
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={sendWhatsApp}
+                    disabled={!member?.phone}
+                    title={member?.phone ? 'שלח הודעה בוואטסאפ' : 'אין מספר טלפון למתפלל'}
+                  >
+                    📱 הודעה
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -392,6 +478,49 @@ export default function MemberDetail() {
                   בטל
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* מודאל יצירת גישת התחברות למתפלל */}
+        {showAccessForm && (
+          <div className="modal-overlay" onClick={() => setShowAccessForm(false)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <h3>🔗 גישת התחברות למתפלל</h3>
+              <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
+                צור גישת התחברות אישית עבור <strong>{member?.name}</strong>.
+                המתפלל יוכל להתחבר עם גוגל ולראות רק את החובות שלו.
+              </p>
+
+              {accessSuccess ? (
+                <div className="success-msg" style={{ marginBottom: 0 }}>
+                  ✅ גישת התחברות נוצרה בהצלחה! {member?.name} יוכל להתחבר עם האימייל {accessEmail} ולראות את חובותיו.
+                </div>
+              ) : (
+                <form onSubmit={createMemberAccess}>
+                  {accessError && <div className="error-msg">{accessError}</div>}
+                  <div className="form-group">
+                    <label>כתובת אימייל של המתפלל</label>
+                    <input
+                      type="email"
+                      dir="ltr"
+                      placeholder="member@example.com"
+                      value={accessEmail}
+                      onChange={e => setAccessEmail(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <div className="form-buttons">
+                    <button className="btn btn-primary" type="submit" disabled={accessSaving}>
+                      {accessSaving ? 'יוצר...' : 'צור גישה'}
+                    </button>
+                    <button className="btn btn-secondary" type="button" onClick={() => setShowAccessForm(false)}>
+                      בטל
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}
